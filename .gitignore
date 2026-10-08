@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Pruebas y cobertura
+.pytest_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+
+# Sonar
+.scannerwork/
+
+# Variables de entorno (secretos); el ejemplo sí se versiona
+.env
+.env.*
+!.env.example
+
+# Config local de agentes de código
+.agents/
+.claude/
+
+# IDE / SO
+.vscode/
+.idea/
+.DS_Store
+.codegraph/

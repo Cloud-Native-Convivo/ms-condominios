@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+pydantic-settings
+sqlalchemy[asyncio]
+oracledb
+httpx
+python-dotenv
+alembic
+py-eureka-client
+aio-pika
+tenacity
