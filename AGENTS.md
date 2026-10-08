@@ -1,4 +1,4 @@
-# AGENTS.md — ms-espacios-comunes
+# AGENTS.md — ms-condominios
 
 `AGENTS.md` es un formato abierto: un Markdown en la raíz del repositorio que los agentes de código leen antes de actuar. Se formalizó como especificación abierta en agosto de 2025 (impulsada por OpenAI con Google, Cursor y Factory) y hoy la mantiene la Agentic AI Foundation, bajo la Linux Foundation. Lo leen de forma nativa Codex, Cursor, Copilot, Gemini CLI, Aider, Windsurf, Zed y otras herramientas — por eso conviene mantener **un** archivo y symlinkear los formatos propietarios hacia él (§16), en vez de sostener copias que divergen.
 
@@ -27,114 +27,115 @@ Cuando dos reglas de este archivo entran en conflicto, se resuelven en este orde
 
 ## 1. Resumen del proyecto
 
-`ms-espacios-comunes` es un microservicio del dominio de Convivo (plataforma de gestión de condominios en Chile). Expone una API REST para CRUD de espacios comunes (salas, quinchos, piscinas, etc.) y gestión de reservas con validación de overlap temporal. Publica eventos de dominio vía RabbitMQ usando el patrón Outbox para garantizar entrega at-least-once. Se registra en Eureka para descubrimiento de servicios.
+`ms-condominios` es un microservicio del dominio de Convivo (plataforma de gestión de condominios en Chile). Expone una API REST para registrar y consultar condominios (nombre, dirección, tipo A/B según Ley 21.442, cantidad de sectores, plan, registro MINVU, seguro de incendio, plan de emergencia). Al crear un condominio publica el evento `CondominioCreado` vía RabbitMQ (exchange `condominios_events`) usando el patrón Outbox para garantizar entrega at-least-once. Se registra en Eureka para descubrimiento de servicios.
 
-Roles: residente (reserva), admin (gestiona espacios), conserje (consulta). La validación de JWT y resolución de roles la hace el BFF — este servicio solo recibe `X-Usuario-Sub` como header.
+**Alcance:** multi-tenancy (varios condominios) está fuera del alcance vigente de `mvp.md` (§4.14, TD-19). Este servicio existe con estructura inicial, pero el equipo todavía no decide si entra al MVP (tarjeta Trello #46). Hasta esa decisión no tiene ruta en el BFF ni task en `terraform-cloud/`.
+
+Roles: admin (lista y crea condominios), residente (consulta un condominio por id). La validación de JWT y resolución de roles la hace el BFF — este servicio solo lee el header `X-Usuario-Roles` (lista separada por comas; `admin` y `administrador` se tratan como equivalentes) en `app/middleware/auth_roles.py:requiere_roles`.
 
 ## 2. Stack técnico
 
 - Lenguaje: Python 3.12
 - Framework: FastAPI 0.115+ (con Uvicorn)
 - ORM: SQLAlchemy 2.0 (async) + oracledb (thin mode)
-- Base de datos: Oracle Database Free 23ai (`espacios_db`)
+- Base de datos: Oracle Database Free 23ai, contenedor propio `oracle-condominios` (PDB `freepdb1`, puerto 1523 en el host); esquema versionado con Alembic (`alembic/versions/`)
 - Mensajería: aio-pika 10.x (RabbitMQ 4, patrón Outbox)
 - Descubrimiento: py-eureka-client
-- Configuración: pydantic-settings (env vars/`.env`) + fetch best-effort a Spring Cloud Config al arrancar (`app/config/settings.py:cargar_configuracion_remota`) — completa solo variables ausentes localmente, config-server caído no bloquea el arranque
-- Tests: pytest + pytest-asyncio
+- Configuración: pydantic-settings (env vars/`.env`) en `app/config/settings.py`. `DB_PASSWORD` y `RABBITMQ_CONTRASENA` no tienen default: si faltan, el arranque falla. Sin integración con config-server: el `docker-compose.yml` de la raíz del workspace pasa `CONFIG_SERVER_URL`, pero este servicio no la lee
+- Tests: pytest + pytest-asyncio + pytest-cov (`pytest.ini`, `.coveragerc` con cobertura de ramas)
 - Contenedores: Docker + docker-compose
 
 ## 3. Estructura del proyecto
 
 ```text
 app/
-  main.py                  # FastAPI app + lifespan (Eureka, background tasks)
+  main.py                    # FastAPI app + lifespan (registro en Eureka, tarea relay Outbox)
   api/
-    router.py              # Agregador de routers v1
-    v1/
-      espacio_router.py    # Endpoints de espacios
-      reserva_router.py    # Endpoints de reservas
-      health_router.py     # Endpoint de health check
+    condominio_router.py     # GET/POST /condominios/, GET /condominios/{id_condominio}
   config/
-    settings.py            # Pydantic Settings (env vars) + fetch best-effort a config-server
-    database.py            # Session factory async (SQLAlchemy + oracledb)
+    settings.py              # Pydantic Settings (env vars)
+    database.py              # Engine y session factory async (SQLAlchemy + oracledb)
   dto/
-    request/
-      espacio_request.py   # Esquemas de entrada para espacios
-      reserva_request.py   # Esquemas de entrada para reservas
-    response/
-      espacio_response.py  # Esquemas de salida para espacios
-      reserva_response.py  # Esquemas de salida para reservas
+    condominio_dto.py        # CondominioCrear / CondominioRespuesta (Pydantic v2)
   model/
-    modelos.py             # Modelos SQLAlchemy (Espacio, Reserva, EventoOutbox)
+    condominio.py            # Modelo SQLAlchemy Condominio
+    outbox.py                # Modelo SQLAlchemy Outbox (índice processed, id)
   repository/
-    interfaces/
-      espacio_repository_interface.py  # Interfaz abstracta
-      reserva_repository_interface.py
-    espacio_repository.py  # Acceso a DB
-    reserva_repository.py
+    condominio_repository.py # Acceso a DB; create() persiste condominio + evento Outbox en la misma transacción
   service/
-    espacio_service.py     # Lógica de negocio
-    reserva_service.py
+    condominio_service.py    # Lógica de negocio
   exception/
-    reserva_exception.py   # Excepciones de reservas
-    espacio_exception.py   # Excepciones de espacios
+    condominio_exception.py  # CondominioNoEncontradoException
   handler/
-    exception_handler.py   # Manejadores FastAPI
+    exception_handler.py     # 404 para CondominioNoEncontradoException
   events/
-    outbox_event.py        # Relay Outbox → RabbitMQ
-    compensacion_consumer.py  # Consumidor de compensación
-    steps/
-      publicar_evento.py
-      compensar_reserva.py
+    outbox_event.py          # Relay Outbox → RabbitMQ (SELECT ... FOR UPDATE SKIP LOCKED)
   middleware/
-    logging_middleware.py   # Logging de requests
+    auth_roles.py            # requiere_roles: valida X-Usuario-Roles (403 si no calza)
+    security_middleware.py   # Headers X-Content-Type-Options, X-Frame-Options, X-XSS-Protection
+    logging_middleware.py    # Logging de requests
+alembic/
+  versions/0001_esquema_inicial.py
 tests/
-  unit/
-    test_reserva_service.py
+  conftest.py                # Fija DB_PASSWORD/RABBITMQ_CONTRASENA de prueba antes de importar app
+  test_condominio_router.py
+  test_condominio_service.py
+  test_condominio_repository.py
+  test_servicio_y_repositorio.py
+  test_outbox_event.py
+  test_outbox_y_lifespan.py
   integration/
-    test_reserva_routes.py
-  e2e/
+    test_oracle.py           # Requiere Oracle real
 ```
 
 ## 4. Comandos
 
 ```bash
-# instalar dependencias (incluye dev)
-pip install -e ".[dev]"
+# instalar dependencias (runtime + dev, igual que el CI)
+pip install -r requirements.txt pytest pytest-asyncio pytest-cov ruff
 
-# test completo
-pytest tests/ -v
+# tests unitarios con cobertura (sin Oracle)
+pytest tests/ -v --ignore=tests/integration
 
 # test acotado a un archivo
-pytest tests/test_reserva_servicio.py -v
+pytest tests/test_condominio_service.py -v
 
-# levantar local (sin dependencias externas)
-uvicorn app.main:app --host 0.0.0.0 --port 8082 --reload
+# tests de integración (requieren Oracle real levantado)
+pytest tests/integration -v
 
-# levantar con docker-compose (Oracle + RabbitMQ + servicio)
+# linter
+ruff check .
+
+# aplicar migraciones (el contenedor lo hace solo al arrancar)
+alembic upgrade head
+
+# levantar local (requiere DB_PASSWORD y RABBITMQ_CONTRASENA en el entorno)
+uvicorn app.main:app --host 0.0.0.0 --port 8084 --reload
+
+# levantar con docker-compose (Oracle propio + servicio; requiere la red externa convivo-network)
 docker compose up --build
 
 # verificar build Docker
-docker build -t ms-espacios-comunes .
+docker build -t ms-condominios .
 ```
 
 ## 5. Estilo de código
 
-**Todo en español**: nombres de funciones (`crear_reserva`, `obtener_espacio_por_id`), variables (`fecha_inicio`, `espacio_id`), archivos (`espacio_repositorio.py`), mensajes de error, comentarios.
+**Todo en español**: nombres de funciones (`crear_condominio`, `obtener_condominio`), variables (`id_condominio`, `tipo_evento`), archivos (`condominio_service.py`), mensajes de error, comentarios. Excepción vigente: los métodos de `CondominioRepository` (`get_all`, `get_by_id`, `create`) y `get_condominio_service` están en inglés — no renombrarlos sin pedido explícito, y no copiar ese patrón en código nuevo.
 
 Patrones obligatorios:
 
 ```python
 # async/await en toda la capa de servicios y repositorios
-async def crear_reserva(db: AsyncSession, reserva: ReservaCrear) -> Reserva:
-    overlap = await reserva_repositorio.verificar_overlap(db, reserva)
-    if overlap:
-        raise ValueError("El espacio ya está reservado en ese horario")
-    return await reserva_repositorio.crear(db, reserva)
+async def obtener_condominio(self, id_condominio: int) -> Condominio:
+    condominio = await self.repository.get_by_id(id_condominio)
+    if not condominio:
+        raise CondominioNoEncontradoException(id_condominio)
+    return condominio
 
 # Queries parametrizadas — nunca concatenar input de usuario
-stmt = select(Espacio).where(Espacio.id == espacio_id)
-resultado = await db.execute(stmt)
+stmt = select(Condominio).where(Condominio.id == id_condominio)
+resultado = await self.session.execute(stmt)
 ```
 
 - Snake_case para todo (funciones, variables, archivos).
@@ -164,7 +165,7 @@ Niveles: lite / full (defecto) / ultra.
 
 ## 7. Pruebas
 
-Cobertura mínima: 80% de ramas (del EDT) en lógica de servicios y validaciones de reserva. Cubrir camino feliz, camino de error, casos límite.
+Cobertura mínima: 80% de ramas (del EDT) en lógica de servicios, autorización por rol y relay Outbox. Cubrir camino feliz, camino de error, casos límite. Hoy el umbral no está forzado mecánicamente (`pytest.ini` sin `--cov-fail-under`, ver §15).
 
 **Qué cobertura se mide** — el número solo significa algo si se dice de qué tipo es:
 
@@ -172,7 +173,7 @@ Cobertura mínima: 80% de ramas (del EDT) en lógica de servicios y validaciones
 | --- | --- | --- |
 | Línea | la línea se ejecutó | piso mínimo; una línea ejecutada puede seguir estando mal |
 | Rama (*branch*) | cada rama de cada condicional se tomó en ambos sentidos | default recomendado para lógica con `if`/`switch` |
-| Mutación | el test **falla** si se altera la lógica | solo en el núcleo crítico (overlap de horarios, Outbox relay) |
+| Mutación | el test **falla** si se altera la lógica | solo en el núcleo crítico (autorización por rol en `requiere_roles`, Outbox relay) |
 
 Cobertura alta con asserts débiles es cobertura falsa: un test que ejecuta código sin afirmar nada sube el porcentaje y no detecta nada. Si el umbral se persigue a costa de asserts triviales, el umbral está haciendo daño.
 
@@ -182,17 +183,17 @@ Cobertura alta con asserts débiles es cobertura falsa: un test que ejecuta cód
 
 Framework: pytest + pytest-asyncio. Ubicación: `tests/` con estructura espejo del código fuente.
 
-Tests existentes (8/8 pasando):
-- `test_reserva_servicio.py`: 3 tests (creación, overlap, espacio inexistente)
-- `test_reserva_rutas.py`: 2 tests (POST /reservas/, GET /reservas/)
-- `test_config_server.py`: 3 tests (esquema no permitido rechazado sin request, config-server caído no lanza excepción, solo completa variables ausentes sin pisar `.env`)
+Tests existentes (verificado el 08/10/2026): 26 tests unitarios pasando, 99% de cobertura (líneas y ramas, `app/`), sin Oracle ni RabbitMQ reales:
+- `test_condominio_router.py`, `test_condominio_service.py`, `test_condominio_repository.py`, `test_servicio_y_repositorio.py`: rutas, 404 de condominio inexistente, 403 por rol, persistencia con evento Outbox.
+- `test_outbox_event.py`, `test_outbox_y_lifespan.py`: relay Outbox (publicación, reintento ante fallo) y lifespan (Eureka disponible/caído, cancelación de tareas).
+- `tests/integration/test_oracle.py`: 3 tests contra Oracle real, fuera de la corrida por defecto.
 
 ```python
-# Ejemplo de test real del proyecto: test de overlap
-async def test_crear_reserva_con_overlap(db_mock):
-    await crear_reserva(db_mock, reserva_1)
-    with pytest.raises(ValueError, match="ya está reservado"):
-        await crear_reserva(db_mock, reserva_2)
+# Patrón usado en el proyecto: servicio con repositorio mockeado
+async def test_obtener_condominio_inexistente(mock_repo):
+    mock_repo.get_by_id.return_value = None
+    with pytest.raises(CondominioNoEncontradoException):
+        await CondominioService(mock_repo).obtener_condominio(99)
 ```
 
 Técnica de diseño de casos declarada por caso no trivial (partición de equivalencia, valores límite, tabla de decisión) — están tipificadas en ISO/IEC/IEEE 29119-4, ver §17.3; elegir la técnica es parte del trabajo, no un adorno documental.
@@ -219,7 +220,7 @@ Fila de docstrings es convención de proyecto (jerarquía §0, nivel 2): docstri
 
 ## 9. Procedimientos QA
 
-Checklist pre-entrega: tests en verde (`pytest tests/ -v`), linter limpio (`ruff check .`), type checking sin errores, sin secrets hardcodeados, queries parametrizadas (SQLAlchemy ORM), documentación actualizada.
+Checklist pre-entrega: tests en verde (`pytest tests/ -v --ignore=tests/integration`), linter limpio (`ruff check .`), type checking sin errores, sin secrets hardcodeados, queries parametrizadas (SQLAlchemy ORM), documentación actualizada.
 
 | Severidad | Acción | Equivalente CVSS v4.0 (si el hallazgo es de seguridad) |
 | --- | --- | --- |
@@ -239,8 +240,8 @@ Secretos en variables de entorno (`.env` para local, Secrets Manager en prod). N
 
 **OWASP Top 10:2025 — alcance real en este proyecto:**
 
-- **A01 Control de acceso roto (SSRF)**: `CONFIG_SERVER_URL` (env var) determina a qué host se hace el fetch de configuración al arrancar — se valida que el esquema sea `http`/`https` antes de la petición (`cargar_configuracion_remota`, rechaza `file://` y similares), pero no se valida el host: alguien con control sobre esa env var podría apuntar a otro destino HTTP/HTTPS interno. Riesgo acotado (env var, no input de request), documentado por transparencia. Aparte, la autorización de negocio la resuelve el BFF: este servicio valida que `X-Usuario-Sub` exista y lo usa para ownership de reservas. No confiar en el cliente para autorización.
-- **A02 Configuración insegura**: sin debug en prod, CORS configurado por el BFF, sin headers de seguridad ausentes.
+- **A01 Control de acceso roto**: la autorización por rol depende del header `X-Usuario-Roles`, que el BFF fija tras validar el JWT. El servicio confía en ese header, así que nunca debe quedar alcanzable sin pasar por el BFF (sin exposición directa en API Gateway ni puerto público en prod). Listar y crear condominios exige `admin`; consultar por id acepta `admin` o `residente`. No hay ownership por condominio todavía: un residente puede consultar cualquier id. No confiar en el cliente para autorización.
+- **A02 Configuración insegura**: sin debug en prod, sin CORS acá (lo resuelve el BFF), headers de seguridad vía `SecurityMiddleware`. Secretos de DB y RabbitMQ sin default en `Settings`.
 - **A03 Fallos de cadena de suministro**: dependencias con lockfile (`requirements.txt` o `pyproject.toml`), sin CVEs conocidos.
 - **A04 Fallos criptográficos**: sin crypto propia, secretos en env vars.
 - **A05 Inyección**: queries parametrizadas siempre (SQLAlchemy ORM), nunca concatenar input de usuario.
@@ -302,7 +303,7 @@ Directo de conventionalcommits.org v1.0.0 — violar cualquiera de estas invalid
 
 - Idioma: sujeto/cuerpo/footer en español. Tipo siempre en inglés (estándar commitlint config-conventional).
 - Sujeto: imperativo presente, minúsculas, sin punto final, ≤72 chars (ideal ≤50). Detalle en el cuerpo, nunca en el sujeto.
-- Alcance opcional, kebab-case, lista cerrada del área tocada: `espacios`, `reservas`, `eventos`, `api`, `db`, `docker`, `deps`, `ci` — agregar alcance nuevo si es real y recurrente; omitir si el cambio es transversal.
+- Alcance opcional, kebab-case, lista cerrada del área tocada: `condominios`, `eventos`, `api`, `db`, `docker`, `deps`, `ci`, `app` — agregar alcance nuevo si es real y recurrente; omitir si el cambio es transversal.
 - Cuerpo: qué y por qué, nunca cómo (el diff ya dice cómo). Un commit = un cambio lógico.
 - Footer: `Closes #N`/`Fixes #N` para issues; breaking change siempre documentado en footer aunque ya lleve `!` en el header.
 - Enforcement mecánico: sin commitlint instalado — el agente valida manualmente.
@@ -324,9 +325,9 @@ Formato con Gitmoji: `:emoji: <tipo>(<alcance>)?(!)?: <sujeto>`. El emoji va **a
 
 **Ejemplos:**
 ```
-:sparkles: feat(reservas): valida overlap horario antes de persistir
-:bug: fix(api): corrige código de estado 404 en espacio inexistente
-:recycle: refactor(db): migra queries a SQLAlchemy 2.0 async
+:sparkles: feat(condominios): valida tipo A/B segun ley 21.442
+:bug: fix(api): corrige codigo de estado 404 en condominio inexistente
+:recycle: refactor(db): agrega indice al relay de outbox
 ```
 
 ### 11.3 Ramas (Git Flow completo — modelo Driessen)
@@ -442,7 +443,7 @@ Los tags en `main` marcan releases de producción y deben ser **anotados e infor
 ```bash
 git tag -a v0.2.2 -m "v0.2.2: Actualización de dependencias y CI de seguridad
 
-- :sparkles: feat: soporte para reservas con solapamiento temporal
+- :sparkles: feat: registro de condominios con evento CondominioCreado
 - :construction_worker: ci(deps): dependabot para pip, docker y actions
 - :shield: security: proteccion estricta de ramas main y develop
 - Refs: PR #9, PR #10"
@@ -479,14 +480,16 @@ docker compose up --build
 
 # producción (ECS Fargate via Terraform)
 # ver despliegue-ecs-fargate.md en la raíz del workspace
-cd ../terraform
+cd ../terraform-cloud
 terraform plan -var-file=terraform.tfvars
 terraform apply -var-file=terraform.tfvars  # requiere aprobación explícita
 ```
 
+Estado actual: `terraform-cloud/` no define task ni servicio ECS para este microservicio. El workflow `docker-publish.yml` publica la imagen en Docker Hub e intenta `aws ecs update-service --service convivo-ms-condominios` con `continue-on-error: true`; ese paso no tiene efecto hasta que exista el servicio. Agregarlo depende de la decisión de alcance (§1).
+
 ## 14. Monorepo
 
-`(no aplica: microservicio independiente)`. Este archivo define la totalidad de las reglas aplicables dentro de `ms-espacios-comunes/` de forma autónoma y autosuficiente.
+`(no aplica: microservicio independiente)`. Este archivo define la totalidad de las reglas aplicables dentro de `ms-condominios/` de forma autónoma y autosuficiente.
 
 ## 15. Enforcement
 
@@ -497,7 +500,7 @@ Este archivo es orientativo, no mecánicamente forzado — un agente puede omiti
 | Secretos (§10) | escaneo de secretos antes del commit | repetido en CI | — |
 | Formato y linter (§5, §8) | `ruff check` / `ruff format` | linter en verde obligatorio | — |
 | Mensaje de commit (§11) | — | — | sí: validación manual |
-| Cobertura (§7) | — | umbral 60% gate en CI | — |
+| Cobertura (§7) | — | CI corre pytest con cobertura y publica comentario, sin umbral bloqueante (pendiente: `--cov-fail-under` en `pytest.ini`) | — |
 | Ramas y protecciones (§11.3) | — | branch protection del remoto | — |
 | Criterio de diseño, límites del agente (§6, §12) | — | — | sí: no son automatizables |
 
@@ -525,13 +528,13 @@ Modelo de calidad del producto, edición 2023: 9 características, cada una con 
 
 | Característica | Subcaracterísticas (2023) | Qué exige en este proyecto | Cómo se verifica |
 | --- | --- | --- | --- |
-| Aptitud funcional | completitud, corrección, adecuación funcional | el microservicio cumple la gestión de espacios y reservas sin solapamiento de horarios | trazabilidad RF-2.1 a RF-2.5 → tests (§7); tests unitarios y de integración pasando |
-| Eficiencia de desempeño | comportamiento temporal, uso de recursos, capacidad | latencia baja en validación de reservas y transacciones de DB | p95 < 200 ms en endpoints de consulta y creación de reservas con pool SQLAlchemy async |
+| Aptitud funcional | completitud, corrección, adecuación funcional | el microservicio registra y consulta condominios con validación de datos (tipo A/B, sectores > 0) | sin RF numerado en `ERS.md`/`mvp.md` todavía (alcance pendiente, §1); tests unitarios y de integración pasando |
+| Eficiencia de desempeño | comportamiento temporal, uso de recursos, capacidad | latencia baja en consultas y escritura con evento Outbox | p95 < 200 ms en endpoints de consulta y creación de condominios con pool SQLAlchemy async |
 | Compatibilidad | coexistencia, interoperabilidad | contratos REST estables e interoperabilidad con BFF y Eureka | OpenAPI `/docs` autogenerado y esquema versionado |
 | Capacidad de interacción *(era Usabilidad)* | reconocibilidad, aprendibilidad, operabilidad, protección contra errores de usuario, involucramiento, inclusividad, asistencia al usuario, autodescripción | `(no aplica interfaz visual directa: microservicio backend REST; la usabilidad la determina el frontend)` | respuestas HTTP estandarizadas con mensajes de error en español claros |
-| Fiabilidad | ausencia de fallos *(antes madurez)*, disponibilidad, tolerancia a fallos, recuperabilidad | tolerancia a caídas de dependencias (fetch best-effort a config-server, Outbox pattern para RabbitMQ) | health check `/health`, reintentos de conexión a Oracle, tests de camino de error |
-| Seguridad | confidencialidad, integridad, no repudio, responsabilidad *(accountability)*, autenticidad, resistencia | 25010 la exige como atributo; §10 y §17.2 la implementan | 0 hallazgos Críticos abiertos (§9); ownership validado por `X-Usuario-Sub` |
-| Mantenibilidad | modularidad, reusabilidad, analizabilidad, modificabilidad, testeabilidad | arquitectura limpia (Router → Service → Repository), tipado estricto | umbrales de §8 en verde (radon B o mejor) + cobertura de §7 (≥60%) |
+| Fiabilidad | ausencia de fallos *(antes madurez)*, disponibilidad, tolerancia a fallos, recuperabilidad | tolerancia a caídas de dependencias (Eureka caído no bloquea el arranque, relay Outbox reintenta sin límite si RabbitMQ cae) | tests de camino de error. Brecha: el `HEALTHCHECK` del `Dockerfile` consulta `/health`, endpoint que no existe (los `docker-compose.yml` usan `/docs`) |
+| Seguridad | confidencialidad, integridad, no repudio, responsabilidad *(accountability)*, autenticidad, resistencia | 25010 la exige como atributo; §10 y §17.2 la implementan | 0 hallazgos Críticos abiertos (§9); roles validados por `X-Usuario-Roles` (§10 A01) |
+| Mantenibilidad | modularidad, reusabilidad, analizabilidad, modificabilidad, testeabilidad | arquitectura limpia (Router → Service → Repository), tipado estricto | umbrales de §8 en verde (radon B o mejor) + cobertura de §7 (≥80% ramas) |
 | Flexibilidad *(era Portabilidad)* | adaptabilidad, instalabilidad, reemplazabilidad, escalabilidad | despliegue en contenedor Docker y compatibilidad ECS Fargate | `docker build` y `docker compose up` reproducibles en entorno limpio |
 | Safety *(nueva en 2023)* | restricción operacional, identificación de riesgos, comportamiento a prueba de fallos, advertencia de peligro, integración segura | `(no aplica: microservicio de software de gestión residencial sin operación sobre maquinaria industrial, vehículos ni salud)` | `(no aplica: sin superficie de safety física)` |
 
@@ -550,20 +553,20 @@ Protege la información sensible que el software procesa. Acá va el control imp
 
 | Propiedad | Control mínimo en el software | Evidencia |
 | --- | --- | --- |
-| Confidencialidad | datos de reservas y residentes cifrados en tránsito (HTTPS vía BFF), secretos fuera del código (§10) | `.env.example` sin valores reales, credenciales en AWS Secrets Manager en prod |
+| Confidencialidad | datos de condominios cifrados en tránsito (HTTPS vía BFF), secretos fuera del código (§10) | `.env.example` sin valores reales, credenciales en AWS Secrets Manager en prod |
 | Integridad | validación estricta de esquemas Pydantic, queries parametrizadas (SQLAlchemy ORM), persistencia atómica de Outbox | código fuente de repositorios y modelos de dominio |
-| Disponibilidad | health check `/health`, reconexión automática en pool de DB y consumidor RabbitMQ | endpoint `/health`, docker-compose healthcheck |
+| Disponibilidad | reconexión automática en pool de DB y relay Outbox con reintento ante caída de RabbitMQ | healthcheck de `docker-compose.yml` sobre `/docs` (falta endpoint `/health`, ver §17.1) |
 
 **Controles del Anexo A (27001:2022) que caen del lado del repositorio:**
 
 | Control | Nombre | Dónde vive en este proyecto |
 | --- | --- | --- |
-| A.8.2 / A.8.3 | Derechos de acceso privilegiado / Restricción de acceso | `X-Usuario-Sub` header obligatorio, validación de pertenencia de reservas (§10) |
+| A.8.2 / A.8.3 | Derechos de acceso privilegiado / Restricción de acceso | `X-Usuario-Roles` validado por endpoint con `requiere_roles` (§10 A01) |
 | A.8.4 | Acceso al código fuente | permisos de repositorio git y branch protection (§11.3) |
 | A.8.5 | Autenticación segura | delegada al BFF + Cognito/Entra ID (§10 A07); sin passwords locales |
 | A.8.8 | Gestión de vulnerabilidades técnicas | lockfile committeado, escaneo de dependencias Python sin CVEs conocidos |
 | A.8.9 | Gestión de configuración | `settings.py` con Pydantic Settings, sin defaults inseguros en producción |
-| A.8.10 / A.8.11 | Eliminación de información / Enmascaramiento | política de cancelación y retención de reservas según ERS |
+| A.8.10 / A.8.11 | Eliminación de información / Enmascaramiento | `(sin uso actual en este proyecto: no hay borrado de condominios ni datos personales que enmascarar)` |
 | A.8.12 | Prevención de fuga de datos | secretos y datos personales fuera de logs y mensajes de excepción (§10 A10) |
 | A.8.13 | Respaldo de la información | respaldos administrados de la base de datos Oracle |
 | A.8.15 / A.8.16 | Registro / Actividades de monitoreo | middleware de logging de peticiones, eventos Outbox con estados registrados |
@@ -576,13 +579,13 @@ Edición vigente: **ISO/IEC 27001:2022**. Su Anexo A trae 93 controles agrupados
 
 - **ISO 9001:2015** (gestión de calidad): procesos consistentes y mejora continua. Se materializa en §9 (checklist pre-entrega), §11 (convención de commits y ramas) y §15 (enforcement). Estado: `(no aplica: sin certificación ISO 9001 formal requerida)`. Hay una revisión en curso (ISO 9001:2026, publicación esperada fines 2026).
 - **IEEE 730** (Software Quality Assurance Processes, edición **730-2026**): armonizada con ISO/IEC/IEEE 12207:2017. Estado: `(no aplica: sin SQAP formal exigido)`.
-- **ISO/IEC/IEEE 29119** (pruebas de software): 29119-1:2022 a -5:2024. Exige técnicas de diseño de casos declaradas (partición de equivalencia, valores límite para horarios de reserva, tabla de decisión para overlap). Complementa §7. Artefactos: `(sin proceso formal 29119; tests residen en tests/ y seguimiento en issues/Trello)`.
+- **ISO/IEC/IEEE 29119** (pruebas de software): 29119-1:2022 a -5:2024. Exige técnicas de diseño de casos declaradas (partición de equivalencia, valores límite para `cantidad_sectores` y largo de campos, tabla de decisión para roles permitidos por endpoint). Complementa §7. Artefactos: `(sin proceso formal 29119; tests residen en tests/ y seguimiento en issues/Trello)`.
 
 **Mapeo de cláusulas ISO 9001:2015 contra este repositorio:**
 
 | Cláusula | Qué pide | Evidencia en este proyecto |
 | --- | --- | --- |
-| 4. Contexto de la organización | alcance y partes interesadas | §1 (microservicio de reservas para Convivo) |
+| 4. Contexto de la organización | alcance y partes interesadas | §1 (microservicio de condominios para Convivo) |
 | 5. Liderazgo | responsabilidades y autoridades definidas | §12 (límites del agente) + mantenedores del workspace |
 | 6. Planificación | riesgos, oportunidades y objetivos de calidad | §17.1 (umbrales de calidad) + `(no aplica: sin registro de riesgos formal)` |
 | 7. Apoyo | competencia, información documentada y su control | este archivo + historial de git |
@@ -594,22 +597,23 @@ Edición vigente: **ISO/IEC 27001:2022**. Su Anexo A trae 93 controles agrupados
 
 | Norma ISO | Ley chilena | Punto de cruce | Qué exige en este repo |
 | --- | --- | --- | --- |
-| ISO/IEC 27001 | Ley 19.628 / **Ley 21.719** (datos personales, entrada en force original: **1-12-2026**, sujeta a conformación de APDP) | cifrado, control de accesos y trazabilidad de datos de residentes | inventario de datos personales tratados (RAT), log de acceso atribuible, procedimiento de notificación de brechas |
+| ISO/IEC 27001 | Ley 19.628 / **Ley 21.719** (datos personales, entrada en force original: **1-12-2026**, sujeta a conformación de APDP) | cifrado, control de accesos y trazabilidad de datos de residentes | hoy no trata datos personales (solo datos del condominio); si se agregan administradores, residentes o contactos al modelo, aplica RAT, log de acceso atribuible y notificación de brechas |
 | ISO/IEC 25010 | Ley 21.180 (transformación digital del Estado) | interoperabilidad y trazabilidad de sistemas | interoperabilidad vía API REST documentada con OpenAPI |
 | ISO 9001 | CMF **NCG 519** (2024) | transparencia y reportabilidad | `(no aplica: no es entidad fiscalizada por la CMF)`; la evidencia de proceso es el historial de git |
 | ISO/IEC 27001 | **Ley 21.459** (delitos informáticos) | prevención de acceso no autorizado y alteración de datos | autenticación delegada, validación de sub, parametrización anti-inyección |
-| ISO/IEC 25010 | **Ley 21.643** (Ley Karin) | canales internos seguros de denuncia | `(no aplica: servicio exclusivo de gestión de espacios y reservas)` |
+| ISO/IEC 25010 | **Ley 21.643** (Ley Karin) | canales internos seguros de denuncia | `(no aplica: servicio exclusivo de registro de condominios)` |
+| ISO/IEC 25010 | **Ley 21.442** (copropiedad inmobiliaria) | clasificación y obligaciones del condominio | `tipo` A/B, `registro_minvu`, `seguro_incendio` y `plan_emergencia` en el modelo `Condominio` |
 | ISO/IEC 27001 | **Ley 21.663** (marco de ciberseguridad) | protección de infraestructura y respuesta a incidentes | logs de seguridad y aislamiento en VPC/ECS |
 
-**Ley 21.719 — plazo real:** no deroga la Ley 19.628, la modifica sustituyendo gran parte de su articulado; crea la Agencia de Protección de Datos Personales (APDP) con potestad fiscalizadora. Si Convivo trata nombres, RUT, teléfonos o correos de residentes vinculados a sus reservas, las medidas técnicas de protección y minimización de datos aplican por diseño antes de la entrada en vigor de las sanciones de la APDP.
+**Ley 21.719 — plazo real:** no deroga la Ley 19.628, la modifica sustituyendo gran parte de su articulado; crea la Agencia de Protección de Datos Personales (APDP) con potestad fiscalizadora. Si Convivo trata nombres, RUT, teléfonos o correos de residentes vinculados a un condominio, las medidas técnicas de protección y minimización de datos aplican por diseño antes de la entrada en vigor de las sanciones de la APDP.
 
 Obligaciones técnicas directas:
 
 | Obligación | Qué implica en el código o la infraestructura |
 | --- | --- |
-| Registro de actividades de tratamiento (RAT) | inventario de qué datos personales de residentes toca cada endpoint de reservas |
-| Base de licitud declarada | finalidad explícita del tratamiento (gestión de reservas de la comunidad) |
-| Derechos ARCO + portabilidad | endpoint o procedimiento para consultar y exportar el historial de reservas de un residente |
+| Registro de actividades de tratamiento (RAT) | inventario de qué datos personales toca cada endpoint de condominios (hoy ninguno) |
+| Base de licitud declarada | finalidad explícita del tratamiento (administración del condominio) |
+| Derechos ARCO + portabilidad | `(sin uso actual en este proyecto: sin datos personales de residentes en este servicio)` |
 | Notificación de brechas | procedimiento técnico para detectar y reportar accesos no autorizados a la base de datos |
 | Evaluación de impacto (EIPD) | exigible en tratamientos de alto riesgo; no requerida para el alcance actual del microservicio |
 | Delegado de Protección de Datos | `(no aplica: sin tratamiento de datos sensibles a gran escala ni monitoreo sistemático)` |
