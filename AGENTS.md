@@ -14,7 +14,7 @@ Plantilla adaptable. Al adaptarla a un proyecto real, sigue estas reglas — no 
 - Comentarios entre paréntesis que son guía-de-relleno se resuelven y desaparecen al aplicar la decisión. Comentarios que explican el PORQUÉ de una regla no son ruido a limpiar — son contenido, se conservan igual que el resto del detalle.
 - Ante la duda entre conservar o borrar: conservar, y marcar `(sin uso actual en este proyecto)` en vez de eliminar. El minimalismo de la sección 6 (Ponytail) rige código nuevo a escribir, no autoriza podar documentación de referencia ya redactada.
 - Sin emojis en código, PR, docs generadas ni output — usar solo como último recurso si no existe alternativa real, nunca como decoración por defecto. En commits rige lo que diga la sección 11: Gitmoji (§11.2) es obligatorio por convención.
-- Nada de solución genérica de tutorial. Cada decisión responde al proyecto real (Convivo) y a lo ya definido en `ERS.md`/`mvp.md` — no copiar boilerplate ni reciclar un patrón sin pensar el caso de uso concreto.
+- Nada de solución genérica de tutorial. Cada decisión responde al proyecto real (Convivo) y a lo ya definido en `ERS.md` — no copiar boilerplate ni reciclar un patrón sin pensar el caso de uso concreto.
 - Todo en español: funciones, variables, archivos, comentarios, mensajes de error.
 
 ## 0. Jerarquía de reglas
@@ -29,7 +29,7 @@ Cuando dos reglas de este archivo entran en conflicto, se resuelven en este orde
 
 `ms-condominios` es un microservicio del dominio de Convivo (plataforma de gestión de condominios en Chile). Expone una API REST para registrar y consultar condominios (nombre, dirección, tipo A/B según Ley 21.442, cantidad de sectores, plan, registro MINVU, seguro de incendio, plan de emergencia). Al crear un condominio publica el evento `CondominioCreado` vía RabbitMQ (exchange `condominios_events`) usando el patrón Outbox para garantizar entrega at-least-once. Se registra en Eureka para descubrimiento de servicios.
 
-**Alcance:** multi-tenancy (varios condominios) está fuera del alcance vigente de `mvp.md` (§4.14, TD-19). Este servicio existe con estructura inicial, pero el equipo todavía no decide si entra al MVP (tarjeta Trello #46). Hasta esa decisión no tiene ruta en el BFF ni task en `terraform-cloud/`.
+**Alcance:** multi-tenancy (varios condominios) está fuera del alcance vigente de `ERS.md` (§4.14, TD-19). Este servicio existe con estructura inicial, pero el equipo todavía no decide si entra al MVP (tarjeta Trello #46). Hasta esa decisión no tiene ruta en el BFF ni task en `terraform-cloud/`.
 
 Roles: admin (lista y crea condominios), residente (consulta un condominio por id). La validación de JWT y resolución de roles la hace el BFF — este servicio solo lee el header `X-Usuario-Roles` (lista separada por comas; `admin` y `administrador` se tratan como equivalentes) en `app/middleware/auth_roles.py:requiere_roles`.
 
@@ -528,7 +528,7 @@ Modelo de calidad del producto, edición 2023: 9 características, cada una con 
 
 | Característica | Subcaracterísticas (2023) | Qué exige en este proyecto | Cómo se verifica |
 | --- | --- | --- | --- |
-| Aptitud funcional | completitud, corrección, adecuación funcional | el microservicio registra y consulta condominios con validación de datos (tipo A/B, sectores > 0) | sin RF numerado en `ERS.md`/`mvp.md` todavía (alcance pendiente, §1); tests unitarios y de integración pasando |
+| Aptitud funcional | completitud, corrección, adecuación funcional | el microservicio registra y consulta condominios con validación de datos (tipo A/B, sectores > 0) | sin RF numerado en `ERS.md` todavía (alcance pendiente, §1); tests unitarios y de integración pasando |
 | Eficiencia de desempeño | comportamiento temporal, uso de recursos, capacidad | latencia baja en consultas y escritura con evento Outbox | p95 < 200 ms en endpoints de consulta y creación de condominios con pool SQLAlchemy async |
 | Compatibilidad | coexistencia, interoperabilidad | contratos REST estables e interoperabilidad con BFF y Eureka | OpenAPI `/docs` autogenerado y esquema versionado |
 | Capacidad de interacción *(era Usabilidad)* | reconocibilidad, aprendibilidad, operabilidad, protección contra errores de usuario, involucramiento, inclusividad, asistencia al usuario, autodescripción | `(no aplica interfaz visual directa: microservicio backend REST; la usabilidad la determina el frontend)` | respuestas HTTP estandarizadas con mensajes de error en español claros |
