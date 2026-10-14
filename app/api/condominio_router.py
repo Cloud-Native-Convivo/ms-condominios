@@ -4,7 +4,11 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.database import obtener_sesion
-from app.dto.condominio_dto import CondominioActualizar, CondominioCrear, CondominioRespuesta
+from app.dto.condominio_dto import (
+    CondominioActualizar,
+    CondominioCrear,
+    CondominioRespuesta,
+)
 from app.middleware.auth_roles import requiere_roles
 from app.model.condominio import Condominio
 from app.repository.condominio_repository import CondominioRepository

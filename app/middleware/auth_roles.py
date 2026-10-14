@@ -1,5 +1,6 @@
 from fastapi import Header, HTTPException
 
+
 def requiere_roles(roles_permitidos: list[str]):
     """Dependencia de FastAPI para validar roles en header X-Usuario-Roles."""
     def verificador(x_usuario_roles: str = Header(default="")) -> set[str]:

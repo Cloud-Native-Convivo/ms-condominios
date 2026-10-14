@@ -12,10 +12,10 @@ import os
 
 import pytest
 import pytest_asyncio
-from alembic import command
 from alembic.config import Config
 from sqlalchemy.future import select
 
+from alembic import command
 from app.config.database import fabrica_sesiones, motor, obtener_sesion
 from app.events.outbox_event import CONSULTA_PENDIENTES
 from app.model.condominio import Condominio
