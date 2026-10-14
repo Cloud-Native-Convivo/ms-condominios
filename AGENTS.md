@@ -14,7 +14,7 @@ Plantilla adaptable. Al adaptarla a un proyecto real, sigue estas reglas — no 
 - Comentarios entre paréntesis que son guía-de-relleno se resuelven y desaparecen al aplicar la decisión. Comentarios que explican el PORQUÉ de una regla no son ruido a limpiar — son contenido, se conservan igual que el resto del detalle.
 - Ante la duda entre conservar o borrar: conservar, y marcar `(sin uso actual en este proyecto)` en vez de eliminar. El minimalismo de la sección 6 (Ponytail) rige código nuevo a escribir, no autoriza podar documentación de referencia ya redactada.
 - Sin emojis en código, PR, docs generadas ni output — usar solo como último recurso si no existe alternativa real, nunca como decoración por defecto. En commits rige lo que diga la sección 11: Gitmoji (§11.2) es obligatorio por convención.
-- Nada de solución genérica de tutorial. Cada decisión responde al proyecto real (Convivo) y a lo ya definido en `ERS.md`/`mvp.md` — no copiar boilerplate ni reciclar un patrón sin pensar el caso de uso concreto.
+- Nada de solución genérica de tutorial. Cada decisión responde al proyecto real (Convivo). `ERS.md` no existe en este workspace (verificado 2026-10-14) — no copiar boilerplate ni reciclar un patrón sin pensar el caso de uso concreto.
 - Todo en español: funciones, variables, archivos, comentarios, mensajes de error.
 
 ## 0. Jerarquía de reglas
@@ -29,7 +29,7 @@ Cuando dos reglas de este archivo entran en conflicto, se resuelven en este orde
 
 `ms-condominios` es un microservicio del dominio de Convivo (plataforma de gestión de condominios en Chile). Expone una API REST para registrar y consultar condominios (nombre, dirección, tipo A/B según Ley 21.442, cantidad de sectores, plan, registro MINVU, seguro de incendio, plan de emergencia). Al crear un condominio publica el evento `CondominioCreado` vía RabbitMQ (exchange `condominios_events`) usando el patrón Outbox para garantizar entrega at-least-once. Se registra en Eureka para descubrimiento de servicios.
 
-**Alcance:** multi-tenancy (varios condominios) está fuera del alcance vigente de `mvp.md` (§4.14, TD-19). Este servicio existe con estructura inicial, pero el equipo todavía no decide si entra al MVP (tarjeta Trello #46). Hasta esa decisión no tiene ruta en el BFF ni task en `terraform-cloud/`.
+**Alcance:** la decisión de si `ms-condominios` (el microservicio, dueño de los registros de condominio) entra al MVP sigue sin resolverse (tarjeta Trello #46) — este servicio existe con estructura inicial, pero hasta esa decisión no tiene ruta en el BFF ni task en `terraform-cloud/`. Ojo con no confundir esto con el campo `condominio_id`: desde el 2026-10-14, `ms-gastos-comunes` y `ms-espacios-comunes` ya tienen `condominio_id` como parámetro obligatorio, y el BFF + `Frontend-CloudNative` lo propagan end-to-end (`VITE_CONDOMINIO_ID` fijo, sin lookup contra este microservicio) — es groundwork de esquema, no una integración real con `ms-condominios`. (La cita original a `ERS.md` §4.14 no es verificable: ese archivo no existe en este workspace.)
 
 Roles: admin (lista y crea condominios), residente (consulta un condominio por id). La validación de JWT y resolución de roles la hace el BFF — este servicio solo lee el header `X-Usuario-Roles` (lista separada por comas; `admin` y `administrador` se tratan como equivalentes) en `app/middleware/auth_roles.py:requiere_roles`.
 
@@ -245,7 +245,7 @@ Secretos en variables de entorno (`.env` para local, Secrets Manager en prod). N
 - **A03 Fallos de cadena de suministro**: dependencias con lockfile (`requirements.txt` o `pyproject.toml`), sin CVEs conocidos.
 - **A04 Fallos criptográficos**: sin crypto propia, secretos en env vars.
 - **A05 Inyección**: queries parametrizadas siempre (SQLAlchemy ORM), nunca concatenar input de usuario.
-- **A06 Diseño inseguro**: threat model básico cubierto por ERS/MVP (§4.6 Auth dual).
+- **A06 Diseño inseguro**: threat model básico, originalmente cubierto por `ERS.md`/`mvp.md` §4.6 (Auth dual) — ninguno de los dos existe en este workspace (verificado 2026-10-14); ver auth dual real en root `AGENTS.md` §2.
 - **A07 Fallos de autenticación**: delegado al BFF + Cognito/Entra ID. Sin passwords en este servicio.
 - **A08 Fallos de integridad**: sin deserialización de input no confiable más allá de Pydantic.
 - **A09 Fallos de logging**: eventos de seguridad loggeados (intentos no autorizados), sin datos sensibles en log.
@@ -479,7 +479,7 @@ El criterio de fondo: **lo reversible dentro del repo se hace; lo que sale del r
 docker compose up --build
 
 # producción (ECS Fargate via Terraform)
-# ver despliegue-ecs-fargate.md en la raíz del workspace
+# el runbook vivia en despliegue-ecs-fargate.md (raiz del workspace); ese archivo no existe (verificado 2026-10-14), usar terraform-cloud/AGENTS.md como referencia
 cd ../terraform-cloud
 terraform plan -var-file=terraform.tfvars
 terraform apply -var-file=terraform.tfvars  # requiere aprobación explícita
@@ -528,7 +528,7 @@ Modelo de calidad del producto, edición 2023: 9 características, cada una con 
 
 | Característica | Subcaracterísticas (2023) | Qué exige en este proyecto | Cómo se verifica |
 | --- | --- | --- | --- |
-| Aptitud funcional | completitud, corrección, adecuación funcional | el microservicio registra y consulta condominios con validación de datos (tipo A/B, sectores > 0) | sin RF numerado en `ERS.md`/`mvp.md` todavía (alcance pendiente, §1); tests unitarios y de integración pasando |
+| Aptitud funcional | completitud, corrección, adecuación funcional | el microservicio registra y consulta condominios con validación de datos (tipo A/B, sectores > 0) | sin RF numerado disponible -- `ERS.md` no existe en este workspace (verificado 2026-10-14); alcance pendiente (§1); tests unitarios y de integración pasando |
 | Eficiencia de desempeño | comportamiento temporal, uso de recursos, capacidad | latencia baja en consultas y escritura con evento Outbox | p95 < 200 ms en endpoints de consulta y creación de condominios con pool SQLAlchemy async |
 | Compatibilidad | coexistencia, interoperabilidad | contratos REST estables e interoperabilidad con BFF y Eureka | OpenAPI `/docs` autogenerado y esquema versionado |
 | Capacidad de interacción *(era Usabilidad)* | reconocibilidad, aprendibilidad, operabilidad, protección contra errores de usuario, involucramiento, inclusividad, asistencia al usuario, autodescripción | `(no aplica interfaz visual directa: microservicio backend REST; la usabilidad la determina el frontend)` | respuestas HTTP estandarizadas con mensajes de error en español claros |
