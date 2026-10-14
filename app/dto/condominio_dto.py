@@ -17,3 +17,14 @@ class CondominioCrear(BaseModel):
 class CondominioRespuesta(CondominioCrear):
     id: int
     model_config = ConfigDict(from_attributes=True)
+
+class CondominioActualizar(BaseModel):
+    # Todos opcionales: actualizacion parcial, solo se aplican los campos enviados
+    nombre: str | None = Field(default=None, min_length=1, max_length=255)
+    direccion: str | None = Field(default=None, min_length=1, max_length=255)
+    tipo: Literal["A", "B"] | None = None
+    cantidad_sectores: int | None = Field(default=None, gt=0)
+    plan: str | None = Field(default=None, min_length=1, max_length=50)
+    registro_minvu: str | None = None
+    seguro_incendio: bool | None = None
+    plan_emergencia: bool | None = None

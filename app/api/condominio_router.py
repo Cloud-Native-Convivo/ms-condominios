@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.database import obtener_sesion
-from app.dto.condominio_dto import CondominioCrear, CondominioRespuesta
+from app.dto.condominio_dto import CondominioActualizar, CondominioCrear, CondominioRespuesta
 from app.middleware.auth_roles import requiere_roles
 from app.model.condominio import Condominio
 from app.repository.condominio_repository import CondominioRepository
@@ -27,3 +27,11 @@ async def crear_condominio(condominio: CondominioCrear, service: CondominioServi
 @router.get("/{id_condominio}", response_model=CondominioRespuesta, dependencies=[Depends(requiere_roles(["ADMIN", "RESIDENTE"]))])
 async def obtener_condominio(id_condominio: int, service: CondominioService = Depends(get_condominio_service)) -> Condominio:
     return await service.obtener_condominio(id_condominio)
+
+@router.put("/{id_condominio}", response_model=CondominioRespuesta, dependencies=[Depends(requiere_roles(["ADMIN"]))])
+async def actualizar_condominio(id_condominio: int, cambios: CondominioActualizar, service: CondominioService = Depends(get_condominio_service)) -> Condominio:
+    return await service.actualizar_condominio(id_condominio, cambios)
+
+@router.delete("/{id_condominio}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(requiere_roles(["ADMIN"]))])
+async def eliminar_condominio(id_condominio: int, service: CondominioService = Depends(get_condominio_service)) -> None:
+    await service.eliminar_condominio(id_condominio)
