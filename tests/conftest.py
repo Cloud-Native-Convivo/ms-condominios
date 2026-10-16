@@ -50,7 +50,6 @@ def client(mock_service):
     app.dependency_overrides.clear()
 
 from app.api.unidad_router import get_unidad_service
-
 from app.repository.unidad_repository import UnidadRepository
 from app.service.unidad_service import UnidadService
 
