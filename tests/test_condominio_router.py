@@ -54,6 +54,37 @@ def test_crear_condominio_rechaza_entrada_invalida_con_422(client, mock_service,
     assert response.status_code == 422
     mock_service.crear_condominio.assert_not_called()
 
+def test_actualizar_condominio_requiere_rol_admin(client, mock_service):
+    response = client.put("/condominios/1", json={"nombre": "Nuevo"}, headers={"X-Usuario-Roles": "RESIDENTE"})
+
+    assert response.status_code == 403
+    mock_service.actualizar_condominio.assert_not_called()
+
+def test_actualizar_condominio_con_rol_admin_exitoso(client, mock_service):
+    mock_service.actualizar_condominio.return_value = CondominioRespuesta(
+        id=1, nombre="Nuevo", direccion="Dir", cantidad_sectores=1, plan="basico"
+    )
+
+    response = client.put("/condominios/1", json={"nombre": "Nuevo"}, headers={"X-Usuario-Roles": "ADMIN"})
+
+    assert response.status_code == 200
+    assert response.json()["nombre"] == "Nuevo"
+    mock_service.actualizar_condominio.assert_called_once()
+
+def test_eliminar_condominio_requiere_rol_admin(client, mock_service):
+    response = client.delete("/condominios/1", headers={"X-Usuario-Roles": "RESIDENTE"})
+
+    assert response.status_code == 403
+    mock_service.eliminar_condominio.assert_not_called()
+
+def test_eliminar_condominio_con_rol_admin_exitoso(client, mock_service):
+    mock_service.eliminar_condominio.return_value = None
+
+    response = client.delete("/condominios/1", headers={"X-Usuario-Roles": "ADMIN"})
+
+    assert response.status_code == 204
+    mock_service.eliminar_condominio.assert_called_once_with(1)
+
 def test_respuestas_llevan_headers_de_seguridad_y_sin_cors(client, mock_service):
     mock_service.obtener_condominio.return_value = CondominioRespuesta(id=1, nombre="Prueba", direccion="Dir")
 
