@@ -7,10 +7,19 @@ import py_eureka_client.eureka_client as eureka_client
 from fastapi import FastAPI
 
 from app.api.condominio_router import router as condominio_router
+from app.api.unidad_router import router as unidad_router
 from app.config.settings import settings
 from app.events.outbox_event import relay_outbox
 from app.exception.condominio_exception import CondominioNoEncontradoException
-from app.handler.exception_handler import condominio_no_encontrado_handler
+from app.exception.unidad_exception import (
+    UnidadDuplicadaException,
+    UnidadNoEncontradaException,
+)
+from app.handler.exception_handler import (
+    condominio_no_encontrado_handler,
+    unidad_duplicada_handler,
+    unidad_no_encontrada_handler,
+)
 from app.middleware.logging_middleware import LoggingMiddleware
 from app.middleware.security_middleware import SecurityMiddleware
 
@@ -56,4 +65,7 @@ app.add_middleware(SecurityMiddleware)
 app.add_middleware(LoggingMiddleware)
 
 app.add_exception_handler(CondominioNoEncontradoException, condominio_no_encontrado_handler)
+app.add_exception_handler(UnidadNoEncontradaException, unidad_no_encontrada_handler)
+app.add_exception_handler(UnidadDuplicadaException, unidad_duplicada_handler)
 app.include_router(condominio_router)
+app.include_router(unidad_router)

@@ -48,3 +48,28 @@ def client(mock_service):
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+
+from app.api.unidad_router import get_unidad_service
+
+from app.repository.unidad_repository import UnidadRepository
+from app.service.unidad_service import UnidadService
+
+
+@pytest.fixture
+def mock_unidad_repo():
+    return AsyncMock(spec=UnidadRepository)
+
+@pytest.fixture
+def mock_condominio_service():
+    return AsyncMock(spec=CondominioService)
+
+@pytest.fixture
+def mock_unidad_service():
+    return AsyncMock(spec=UnidadService)
+
+@pytest.fixture
+def client_unidad(mock_unidad_service):
+    app.dependency_overrides[get_unidad_service] = lambda: mock_unidad_service
+    with TestClient(app) as test_client:
+        yield test_client
+    app.dependency_overrides.clear()
