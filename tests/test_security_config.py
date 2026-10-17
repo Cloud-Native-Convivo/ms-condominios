@@ -5,6 +5,7 @@ from app.config.security_config import (
     normalizar_roles,
     obtener_contexto_usuario,
     requerir_roles,
+    requerir_roles_contexto,
     requiere_roles,
 )
 
@@ -44,7 +45,7 @@ def test_requiere_roles_rechaza_residente_con_403():
     assert exc.value.detail == "Permisos insuficientes"
 
 def test_requerir_roles_valida_con_usuario_contexto():
-    verificador = requerir_roles(["ADMIN"])
+    verificador = requerir_roles_contexto(["ADMIN"])
     ctx_res = UsuarioContexto(usuario_sub="u-1", roles={"residente"})
     with pytest.raises(HTTPException) as exc:
         verificador(contexto=ctx_res)

@@ -76,19 +76,30 @@ def obtener_contexto_usuario(
 
 
 def requerir_roles(roles_permitidos: list[str]):
-    """Dependencia que valida roles permitidos aceptando x_usuario_roles o contexto."""
+    """Dependencia de FastAPI para validar roles en header X-Usuario-Roles."""
     permitidos_normalizados = set()
     for r in roles_permitidos:
         permitidos_normalizados.update(normalizar_roles(r))
 
-    def verificador(
-        x_usuario_roles: str = Header(default=""),
-        contexto: UsuarioContexto | None = None,
-    ) -> set[str]:
-        roles = contexto.roles if contexto else normalizar_roles(x_usuario_roles)
+    def verificador(x_usuario_roles: str = Header(default="")) -> set[str]:
+        roles = normalizar_roles(x_usuario_roles)
         if not roles.intersection(permitidos_normalizados):
             raise HTTPException(status_code=403, detail="Permisos insuficientes")
         return roles
+
+    return verificador
+
+
+def requerir_roles_contexto(roles_permitidos: list[str]):
+    """Dependencia factory que evalúa roles sobre el UsuarioContexto inyectado."""
+    permitidos_normalizados = set()
+    for r in roles_permitidos:
+        permitidos_normalizados.update(normalizar_roles(r))
+
+    def verificador(contexto: UsuarioContexto = Depends(obtener_contexto_usuario)) -> UsuarioContexto:
+        if not contexto.roles.intersection(permitidos_normalizados):
+            raise HTTPException(status_code=403, detail="Permisos insuficientes")
+        return contexto
 
     return verificador
 
