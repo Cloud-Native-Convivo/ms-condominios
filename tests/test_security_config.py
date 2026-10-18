@@ -1,5 +1,6 @@
 import pytest
 from fastapi import HTTPException
+
 from app.config.security_config import (
     UsuarioContexto,
     normalizar_roles,
@@ -8,6 +9,7 @@ from app.config.security_config import (
     requerir_roles_contexto,
     requiere_roles,
 )
+
 
 def test_normalizar_roles_condominios():
     assert "admin" in normalizar_roles("ADMIN")

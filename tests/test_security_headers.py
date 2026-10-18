@@ -1,5 +1,6 @@
 from app.dto.condominio_dto import CondominioRespuesta
 
+
 def test_cabeceras_de_seguridad_completas(client):
     resp = client.get("/docs")
     assert resp.status_code == 200
