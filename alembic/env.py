@@ -23,6 +23,7 @@ if config.config_file_name is not None:
 
 import app.model.condominio
 import app.model.outbox
+import app.model.solicitud_asignacion  # noqa: F401
 import app.model.unidad  # necesario para que Base.metadata conozca la tabla en autogenerate
 from app.config.database import Base
 from app.config.settings import settings
