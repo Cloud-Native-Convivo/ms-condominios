@@ -20,7 +20,7 @@ def get_condominio_service(db: AsyncSession = Depends(obtener_sesion)) -> Condom
     repo = CondominioRepository(db)
     return CondominioService(repo)
 
-@router.get("/", response_model=list[CondominioRespuesta], dependencies=[Depends(requiere_roles(["ADMIN"]))])
+@router.get("/", response_model=list[CondominioRespuesta], dependencies=[Depends(requiere_roles(["ADMIN", "RESIDENTE"]))])
 async def listar_condominios(service: CondominioService = Depends(get_condominio_service)) -> Sequence[Condominio]:
     return await service.listar_condominios()
 

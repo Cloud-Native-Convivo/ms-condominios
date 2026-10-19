@@ -41,6 +41,16 @@ def test_obtener_condominios_permite_residente(client, mock_service):
     assert data["id"] == 1
     mock_service.obtener_condominio.assert_called_once_with(1)
 
+
+def test_catalogo_de_condominios_permite_residente_sin_habilitar_mutaciones(client, mock_service):
+    mock_service.listar_condominios.return_value = [
+        CondominioRespuesta(id=1, nombre="Prueba", direccion="Dir")
+    ]
+    response = client.get("/condominios/", headers={"X-Usuario-Roles": "RESIDENTE"})
+    assert response.status_code == 200
+    assert response.json()[0]["nombre"] == "Prueba"
+    assert client.post("/condominios/", json={}, headers={"X-Usuario-Roles": "RESIDENTE"}).status_code == 403
+
 @pytest.mark.parametrize("cambio", [
     {"nombre": ""},
     {"nombre": "x" * 256},
