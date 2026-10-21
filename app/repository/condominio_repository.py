@@ -24,14 +24,31 @@ class CondominioRepository:
         """Persiste el condominio y, si se indica, su evento outbox en la misma transacción."""
         self.session.add(condominio)
         await self.session.flush()  # asigna el id antes de armar el evento
-        if tipo_evento:
-            payload = {c.name: getattr(condominio, c.name) for c in Condominio.__table__.columns}
-            self.session.add(Outbox(
-                aggregate_type="Condominio",
-                aggregate_id=str(condominio.id),
-                type=tipo_evento,
-                payload=json.dumps(payload),
-            ))
+        await self._registrar_evento(condominio, tipo_evento)
         await self.session.commit()
         await self.session.refresh(condominio)
         return condominio
+
+    async def actualizar(self, condominio: Condominio, tipo_evento: str | None = None) -> Condominio:
+        """Persiste cambios sobre un condominio ya cargado y, si se indica, su evento outbox."""
+        await self._registrar_evento(condominio, tipo_evento)
+        await self.session.commit()
+        await self.session.refresh(condominio)
+        return condominio
+
+    async def eliminar(self, condominio: Condominio, tipo_evento: str | None = None) -> None:
+        """Elimina fisicamente el condominio y, si se indica, registra su evento outbox antes de borrarlo."""
+        await self._registrar_evento(condominio, tipo_evento)
+        await self.session.delete(condominio)
+        await self.session.commit()
+
+    async def _registrar_evento(self, condominio: Condominio, tipo_evento: str | None) -> None:
+        if not tipo_evento:
+            return
+        payload = {c.name: getattr(condominio, c.name) for c in Condominio.__table__.columns}
+        self.session.add(Outbox(
+            aggregate_type="Condominio",
+            aggregate_id=str(condominio.id),
+            type=tipo_evento,
+            payload=json.dumps(payload),
+        ))

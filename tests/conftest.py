@@ -4,14 +4,17 @@ import os
 os.environ.setdefault("DB_PASSWORD", "test")
 os.environ.setdefault("RABBITMQ_CONTRASENA", "test")
 
-import pytest
 from unittest.mock import AsyncMock, patch
+
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.main import app
-from app.service.condominio_service import CondominioService
-from app.repository.condominio_repository import CondominioRepository
+
 from app.api.condominio_router import get_condominio_service
+from app.main import app
+from app.repository.condominio_repository import CondominioRepository
+from app.service.condominio_service import CondominioService
+
 
 @pytest.fixture
 def mock_repo():
@@ -27,6 +30,7 @@ def mock_session():
 
 from contextlib import asynccontextmanager
 
+
 @pytest.fixture(autouse=True)
 def override_lifespan():
     @asynccontextmanager
@@ -41,6 +45,30 @@ def override_lifespan():
 @pytest.fixture
 def client(mock_service):
     app.dependency_overrides[get_condominio_service] = lambda: mock_service
+    with TestClient(app) as test_client:
+        yield test_client
+    app.dependency_overrides.clear()
+
+from app.api.unidad_router import get_unidad_service
+from app.repository.unidad_repository import UnidadRepository
+from app.service.unidad_service import UnidadService
+
+
+@pytest.fixture
+def mock_unidad_repo():
+    return AsyncMock(spec=UnidadRepository)
+
+@pytest.fixture
+def mock_condominio_service():
+    return AsyncMock(spec=CondominioService)
+
+@pytest.fixture
+def mock_unidad_service():
+    return AsyncMock(spec=UnidadService)
+
+@pytest.fixture
+def client_unidad(mock_unidad_service):
+    app.dependency_overrides[get_unidad_service] = lambda: mock_unidad_service
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()

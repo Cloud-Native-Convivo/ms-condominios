@@ -12,10 +12,10 @@ import os
 
 import pytest
 import pytest_asyncio
-from alembic import command
 from alembic.config import Config
 from sqlalchemy.future import select
 
+from alembic import command
 from app.config.database import fabrica_sesiones, motor, obtener_sesion
 from app.events.outbox_event import CONSULTA_PENDIENTES
 from app.model.condominio import Condominio
@@ -88,3 +88,38 @@ async def test_consulta_del_relay_salta_filas_bloqueadas_por_otra_replica():
 
     assert tomados_por_a, "la consulta debe devolver los pendientes"
     assert tomados_por_b == []
+
+
+async def test_unidad_respeta_unique_constraint_en_oracle_real():
+    from app.exception.unidad_exception import UnidadDuplicadaException
+    from app.model.unidad import Unidad
+    from app.repository.unidad_repository import UnidadRepository
+
+    async with fabrica_sesiones() as sesion:
+        condominio = Condominio(nombre="Test Oracle Unidad", direccion="Dir", cantidad_sectores=1, plan="basico")
+        sesion.add(condominio)
+        await sesion.flush()
+
+        repo = UnidadRepository(sesion)
+        await repo.create(Unidad(condominio_id=condominio.id, torre="A", piso="1", numero="101"))
+
+        with pytest.raises(UnidadDuplicadaException):
+            await repo.create(Unidad(condominio_id=condominio.id, torre="A", piso="1", numero="101"))
+
+
+async def test_unidad_boolean_activa_persiste_correctamente_en_oracle():
+    from app.model.unidad import Unidad
+    from app.repository.unidad_repository import UnidadRepository
+
+    async with fabrica_sesiones() as sesion:
+        condominio = Condominio(nombre="Test Oracle Unidad 2", direccion="Dir", cantidad_sectores=1, plan="basico")
+        sesion.add(condominio)
+        await sesion.flush()
+
+        repo = UnidadRepository(sesion)
+        unidad = await repo.create(Unidad(condominio_id=condominio.id, torre="B", piso="2", numero="202"))
+        assert unidad.activa is True
+
+        unidad.activa = False
+        actualizada = await repo.actualizar(unidad)
+        assert actualizada.activa is False

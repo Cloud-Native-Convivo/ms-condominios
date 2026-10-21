@@ -21,10 +21,12 @@ if config.config_file_name is not None:
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
 
-from app.config.settings import settings
-from app.config.database import Base
 import app.model.condominio
 import app.model.outbox
+import app.model.solicitud_asignacion  # noqa: F401
+import app.model.unidad  # necesario para que Base.metadata conozca la tabla en autogenerate
+from app.config.database import Base
+from app.config.settings import settings
 
 # "%" se duplica porque configparser lo interpreta como interpolación
 config.set_main_option(
