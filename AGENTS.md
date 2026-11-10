@@ -41,7 +41,7 @@ Roles: admin (lista y crea condominios), residente (consulta un condominio por i
 - Base de datos: Oracle Database Free 23ai, contenedor propio `oracle-condominios` (PDB `freepdb1`, puerto 1523 en el host); esquema versionado con Alembic (`alembic/versions/`)
 - Mensajería: aio-pika 10.x (RabbitMQ 4, patrón Outbox)
 - Descubrimiento: py-eureka-client
-- Configuración: pydantic-settings (env vars/`.env`) en `app/config/settings.py`. `DB_PASSWORD` y `RABBITMQ_CONTRASENA` no tienen default: si faltan, el arranque falla. Sin integración con config-server: el `docker-compose.yml` de la raíz del workspace pasa `CONFIG_SERVER_URL`, pero este servicio no la lee
+- Configuración: pydantic-settings (env vars/`.env`) en `app/config/settings.py`. `DB_PASSWORD` y `RABBITMQ_CONTRASENA` no tienen default: si faltan, el arranque falla. Al arrancar, `cargar_configuracion_remota` (en `settings.py`) completa solo las variables de entorno ausentes con lo que sirve config-server (`ms-condominios.yml`, vía `CONFIG_SERVER_URL`); los passwords y los valores con `${...}` nunca se toman de ahí. Config-server caído no bloquea el arranque
 - Tests: pytest + pytest-asyncio + pytest-cov (`pytest.ini`, `.coveragerc` con cobertura de ramas)
 - Contenedores: Docker + docker-compose
 
