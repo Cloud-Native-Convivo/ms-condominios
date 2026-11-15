@@ -5,16 +5,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.database import obtener_sesion
 from app.config.security_config import UsuarioContexto, obtener_contexto_usuario
+from app.dto.unidad_dto import UnidadCrear
+from app.exception.unidad_exception import UnidadInexistenteException
 from app.middleware.auth_roles import requiere_roles
 from app.model.condominio import Condominio
 from app.model.solicitud_asignacion import SolicitudAsignacion
+from app.model.unidad import Unidad
+from app.repository.unidad_repository import UnidadRepository
+from app.service.unidad_service import describir_unidad, normalizar_segun_tipo
 
 router = APIRouter(prefix="/condominios/solicitudes", tags=["Solicitudes de asignación"])
 
 
-class SolicitudCrear(BaseModel):
+class SolicitudCrear(UnidadCrear):
+    # Hereda torre/piso/numero con la misma normalizacion que UnidadCrear,
+    # asi la busqueda calza con lo que el admin guardo al crear la unidad.
     condominio_id: int = Field(gt=0)
-    unidad: str = Field(min_length=1, max_length=100)
 
 
 class SolicitudRespuesta(BaseModel):
@@ -22,6 +28,7 @@ class SolicitudRespuesta(BaseModel):
     usuario_sub: str
     condominio_id: int
     unidad: str
+    unidad_id: int | None = None
     estado: str
 
     model_config = {"from_attributes": True}
@@ -42,18 +49,29 @@ async def solicitar_asignacion(
     usuario: UsuarioContexto = Depends(obtener_contexto_usuario),
     sesion: AsyncSession = Depends(obtener_sesion),
 ):
-    if not await sesion.get(Condominio, datos.condominio_id):
+    condominio = await sesion.get(Condominio, datos.condominio_id)
+    if not condominio:
         raise HTTPException(status_code=404, detail="Condominio no encontrado")
+    torre, piso = normalizar_segun_tipo(condominio.tipo, datos.torre, datos.piso)
+    unidad = await UnidadRepository(sesion).get_activa_por_direccion(condominio.id, torre, piso, datos.numero)
+    if not unidad:
+        raise UnidadInexistenteException()
+    texto = describir_unidad(condominio.tipo, torre, piso, datos.numero)
+
     resultado = await sesion.execute(select(SolicitudAsignacion).where(SolicitudAsignacion.usuario_sub == usuario.usuario_sub))
     solicitud = resultado.scalar_one_or_none()
     if solicitud and solicitud.estado == "aprobada":
         raise HTTPException(status_code=409, detail="Asignación ya aprobada")
     if solicitud:
         solicitud.condominio_id = datos.condominio_id
-        solicitud.unidad = datos.unidad
+        solicitud.unidad = texto
+        solicitud.unidad_id = unidad.id
         solicitud.estado = "pendiente"
     else:
-        solicitud = SolicitudAsignacion(usuario_sub=usuario.usuario_sub, condominio_id=datos.condominio_id, unidad=datos.unidad, estado="pendiente")
+        solicitud = SolicitudAsignacion(
+            usuario_sub=usuario.usuario_sub, condominio_id=datos.condominio_id,
+            unidad=texto, unidad_id=unidad.id, estado="pendiente",
+        )
         sesion.add(solicitud)
     await sesion.commit()
     await sesion.refresh(solicitud)
@@ -73,6 +91,12 @@ async def aprobar_solicitud(id_solicitud: int, sesion: AsyncSession = Depends(ob
         raise HTTPException(status_code=404, detail="Solicitud no encontrada")
     if solicitud.estado != "pendiente":
         raise HTTPException(status_code=409, detail="La solicitud ya fue procesada")
+    # Se revalida: la unidad pudo desactivarse entre la solicitud y la aprobacion.
+    # Una solicitud sin unidad_id (anterior a la migracion 0004) no se aprueba:
+    # el residente debe enviarla de nuevo para vincularla a una unidad real.
+    unidad = await sesion.get(Unidad, solicitud.unidad_id) if solicitud.unidad_id else None
+    if not unidad or not unidad.activa or unidad.condominio_id != solicitud.condominio_id:
+        raise UnidadInexistenteException()
     solicitud.estado = "aprobada"
     await sesion.commit()
     await sesion.refresh(solicitud)

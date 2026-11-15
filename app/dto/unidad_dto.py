@@ -22,7 +22,9 @@ def _torre_o_unica(v: object) -> object:
 class UnidadCrear(BaseModel):
     # condominio_id no va en el body: ya viene en la ruta (/condominios/{id_condominio}/unidades).
     torre: str = Field(default="UNICA", max_length=50)
-    piso: str = Field(min_length=1, max_length=10)
+    # Opcional en el DTO: en tipo B lo fija el servidor y en tipo A lo exige
+    # el servicio (normalizar_segun_tipo), que es quien conoce el tipo.
+    piso: str | None = Field(default=None, min_length=1, max_length=10)
     numero: str = Field(min_length=1, max_length=20)
 
     @field_validator("torre", mode="before")
@@ -39,6 +41,7 @@ class UnidadCrear(BaseModel):
 
 
 class UnidadRespuesta(UnidadCrear):
+    piso: str
     id: int
     condominio_id: int
     activa: bool

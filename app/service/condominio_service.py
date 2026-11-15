@@ -1,7 +1,10 @@
 from collections.abc import Sequence
 
 from app.dto.condominio_dto import CondominioActualizar, CondominioCrear
-from app.exception.condominio_exception import CondominioNoEncontradoException
+from app.exception.condominio_exception import (
+    CondominioConUnidadesException,
+    CondominioNoEncontradoException,
+)
 from app.model.condominio import Condominio
 from app.repository.condominio_repository import CondominioRepository
 
@@ -24,7 +27,17 @@ class CondominioService:
 
     async def actualizar_condominio(self, id_condominio: int, dto: CondominioActualizar) -> Condominio:
         condominio = await self.obtener_condominio(id_condominio)
-        for campo, valor in dto.model_dump(exclude_unset=True).items():
+        cambios = dto.model_dump(exclude_unset=True)
+        # El tipo define que unidades caben (A torres, B casas): cambiarlo con
+        # unidades creadas las dejaria incoherentes con la regla.
+        nuevo_tipo = cambios.get("tipo")
+        if (
+            nuevo_tipo is not None
+            and nuevo_tipo != condominio.tipo
+            and await self.repository.tiene_unidades(id_condominio)
+        ):
+            raise CondominioConUnidadesException(id_condominio)
+        for campo, valor in cambios.items():
             setattr(condominio, campo, valor)
         return await self.repository.actualizar(condominio, "CondominioActualizado")
 
