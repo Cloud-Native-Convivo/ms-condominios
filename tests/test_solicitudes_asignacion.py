@@ -62,6 +62,33 @@ def test_solicitud_vincula_unidad_existente_con_identidad_verificada(con_sesion,
     assert solicitud.usuario_sub == "usuario-real"
 
 
+def test_solicitud_guarda_el_correo_que_fija_el_bff(con_sesion, buscar_unidad):
+    _preparar_creacion(con_sesion, "B")
+    buscar_unidad.return_value = Unidad(id=3, condominio_id=42, torre="UNICA", piso="0", numero="24", activa=True)
+
+    with TestClient(app) as client:
+        respuesta = client.post(
+            "/condominios/solicitudes",
+            json={"condominio_id": 42, "numero": "24", "usuario_email": "falso@x.cl"},
+            headers={**RESIDENTE, "X-Usuario-Email": " ana@convivo.cl "},
+        )
+
+    assert respuesta.status_code == 201
+    # El correo del body se ignora: solo cuenta el header que pone el bff.
+    assert respuesta.json()["usuario_email"] == "ana@convivo.cl"
+
+
+def test_solicitud_sin_header_de_correo_lo_deja_nulo(con_sesion, buscar_unidad):
+    _preparar_creacion(con_sesion, "B")
+    buscar_unidad.return_value = Unidad(id=3, condominio_id=42, torre="UNICA", piso="0", numero="24", activa=True)
+
+    with TestClient(app) as client:
+        respuesta = client.post("/condominios/solicitudes", json={"condominio_id": 42, "numero": "24"}, headers=RESIDENTE)
+
+    assert respuesta.status_code == 201
+    assert respuesta.json()["usuario_email"] is None
+
+
 def test_solicitud_en_condominio_de_casas_usa_torre_y_piso_fijos(con_sesion, buscar_unidad):
     _preparar_creacion(con_sesion, "B")
     buscar_unidad.return_value = Unidad(id=3, condominio_id=42, torre="UNICA", piso="0", numero="24", activa=True)

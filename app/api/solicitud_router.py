@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,6 +26,7 @@ class SolicitudCrear(UnidadCrear):
 class SolicitudRespuesta(BaseModel):
     id: int
     usuario_sub: str
+    usuario_email: str | None = None
     condominio_id: int
     unidad: str
     unidad_id: int | None = None
@@ -48,7 +49,10 @@ async def solicitar_asignacion(
     datos: SolicitudCrear,
     usuario: UsuarioContexto = Depends(obtener_contexto_usuario),
     sesion: AsyncSession = Depends(obtener_sesion),
+    # Header de identidad que fija el bff, como X-Usuario-Sub: no viene del cliente.
+    x_usuario_email: str | None = Header(default=None, max_length=255),
 ):
+    usuario_email = x_usuario_email.strip() if x_usuario_email and x_usuario_email.strip() else None
     condominio = await sesion.get(Condominio, datos.condominio_id)
     if not condominio:
         raise HTTPException(status_code=404, detail="Condominio no encontrado")
@@ -67,9 +71,11 @@ async def solicitar_asignacion(
         solicitud.unidad = texto
         solicitud.unidad_id = unidad.id
         solicitud.estado = "pendiente"
+        if usuario_email:
+            solicitud.usuario_email = usuario_email
     else:
         solicitud = SolicitudAsignacion(
-            usuario_sub=usuario.usuario_sub, condominio_id=datos.condominio_id,
+            usuario_sub=usuario.usuario_sub, usuario_email=usuario_email, condominio_id=datos.condominio_id,
             unidad=texto, unidad_id=unidad.id, estado="pendiente",
         )
         sesion.add(solicitud)
