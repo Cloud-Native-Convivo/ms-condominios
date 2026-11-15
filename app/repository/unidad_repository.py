@@ -26,6 +26,20 @@ class UnidadRepository:
         resultado = await self.session.execute(stmt)
         return resultado.scalars().first()
 
+    async def get_activa_por_direccion(
+        self, condominio_id: int, torre: str, piso: str, numero: str
+    ) -> Unidad | None:
+        """Busca la unidad activa con esa direccion (calza con uq_unidad_direccion)."""
+        stmt = select(Unidad).where(
+            Unidad.condominio_id == condominio_id,
+            Unidad.torre == torre,
+            Unidad.piso == piso,
+            Unidad.numero == numero,
+            Unidad.activa == True,  # noqa: E712 — comparacion explicita, estilo SQLAlchemy
+        )
+        resultado = await self.session.execute(stmt)
+        return resultado.scalars().first()
+
     async def create(self, unidad: Unidad) -> Unidad:
         """Persiste la unidad; traduce SOLO violacion de unicidad (ORA-00001) a excepcion de dominio."""
         self.session.add(unidad)

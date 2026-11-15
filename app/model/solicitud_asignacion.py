@@ -9,6 +9,12 @@ class SolicitudAsignacion(Base):
 
     id = Column(Integer, Identity(), primary_key=True)
     usuario_sub = Column(String(255), nullable=False)
+    # Lo fija el bff (header X-Usuario-Email) para que el admin reconozca al
+    # residente; el sub de Cognito no le dice nada. Nullable: puede no resolverse.
+    usuario_email = Column(String(255), nullable=True)
     condominio_id = Column(Integer, ForeignKey("condominios.id"), nullable=False)
+    # Texto legible armado por el servidor; unidad_id es la referencia real.
+    # Nullable: las solicitudes anteriores a 0004 solo guardaban el texto.
     unidad = Column(String(100), nullable=False)
+    unidad_id = Column(Integer, ForeignKey("unidades.id", name="fk_solicitud_unidad"), nullable=True)
     estado = Column(String(20), nullable=False, default="pendiente")

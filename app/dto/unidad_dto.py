@@ -1,3 +1,5 @@
+import re
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
@@ -15,14 +17,18 @@ def _torre_o_unica(v: object) -> object:
         return "UNICA"
     if not isinstance(v, str):
         return v
-    limpio = _limpiar(v)
+    # "Torre B", "torre b" y "B" son la misma torre: sin quitar el prefijo, la
+    # solicitud del residente no calzaba con la unidad que cargo el admin.
+    limpio = re.sub(r"^TORRE\s+", "", _limpiar(v))
     return limpio if limpio else "UNICA"
 
 
 class UnidadCrear(BaseModel):
     # condominio_id no va en el body: ya viene en la ruta (/condominios/{id_condominio}/unidades).
     torre: str = Field(default="UNICA", max_length=50)
-    piso: str = Field(min_length=1, max_length=10)
+    # Opcional en el DTO: en tipo B lo fija el servidor y en tipo A lo exige
+    # el servicio (normalizar_segun_tipo), que es quien conoce el tipo.
+    piso: str | None = Field(default=None, min_length=1, max_length=10)
     numero: str = Field(min_length=1, max_length=20)
 
     @field_validator("torre", mode="before")
@@ -39,6 +45,7 @@ class UnidadCrear(BaseModel):
 
 
 class UnidadRespuesta(UnidadCrear):
+    piso: str
     id: int
     condominio_id: int
     activa: bool

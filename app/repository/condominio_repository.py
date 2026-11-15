@@ -6,6 +6,7 @@ from sqlalchemy.future import select
 
 from app.model.condominio import Condominio
 from app.model.outbox import Outbox
+from app.model.unidad import Unidad
 
 
 class CondominioRepository:
@@ -19,6 +20,13 @@ class CondominioRepository:
     async def get_by_id(self, id_condominio: int) -> Condominio | None:
         result = await self.session.execute(select(Condominio).where(Condominio.id == id_condominio))
         return result.scalars().first()
+
+    async def tiene_unidades(self, id_condominio: int) -> bool:
+        """Indica si el condominio tiene alguna unidad, activa o no (una inactiva puede reactivarse)."""
+        result = await self.session.execute(
+            select(Unidad.id).where(Unidad.condominio_id == id_condominio).limit(1)
+        )
+        return result.first() is not None
 
     async def create(self, condominio: Condominio, tipo_evento: str | None = None) -> Condominio:
         """Persiste el condominio y, si se indica, su evento outbox en la misma transacción."""

@@ -11,14 +11,21 @@ from app.api.solicitud_router import router as solicitud_router
 from app.api.unidad_router import router as unidad_router
 from app.config.settings import settings
 from app.events.outbox_event import relay_outbox
-from app.exception.condominio_exception import CondominioNoEncontradoException
+from app.exception.condominio_exception import (
+    CondominioConUnidadesException,
+    CondominioNoEncontradoException,
+)
 from app.exception.unidad_exception import (
     UnidadDuplicadaException,
+    UnidadIncompatibleConTipoException,
+    UnidadInexistenteException,
     UnidadNoEncontradaException,
 )
 from app.handler.exception_handler import (
+    condominio_con_unidades_handler,
     condominio_no_encontrado_handler,
     unidad_duplicada_handler,
+    unidad_invalida_handler,
     unidad_no_encontrada_handler,
 )
 from app.middleware.logging_middleware import LoggingMiddleware
@@ -68,6 +75,9 @@ app.add_middleware(LoggingMiddleware)
 app.add_exception_handler(CondominioNoEncontradoException, condominio_no_encontrado_handler)
 app.add_exception_handler(UnidadNoEncontradaException, unidad_no_encontrada_handler)
 app.add_exception_handler(UnidadDuplicadaException, unidad_duplicada_handler)
+app.add_exception_handler(CondominioConUnidadesException, condominio_con_unidades_handler)
+app.add_exception_handler(UnidadIncompatibleConTipoException, unidad_invalida_handler)
+app.add_exception_handler(UnidadInexistenteException, unidad_invalida_handler)
 app.include_router(solicitud_router)
 app.include_router(condominio_router)
 app.include_router(unidad_router)
