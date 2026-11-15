@@ -1,3 +1,5 @@
+import re
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
@@ -15,7 +17,9 @@ def _torre_o_unica(v: object) -> object:
         return "UNICA"
     if not isinstance(v, str):
         return v
-    limpio = _limpiar(v)
+    # "Torre B", "torre b" y "B" son la misma torre: sin quitar el prefijo, la
+    # solicitud del residente no calzaba con la unidad que cargo el admin.
+    limpio = re.sub(r"^TORRE\s+", "", _limpiar(v))
     return limpio if limpio else "UNICA"
 
 

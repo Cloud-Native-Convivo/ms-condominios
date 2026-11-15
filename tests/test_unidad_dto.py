@@ -10,6 +10,11 @@ def test_normaliza_torre_piso_numero_a_mayuscula_sin_espacios():
     assert dto.piso == "3"
     assert dto.numero == "101"
 
+@pytest.mark.parametrize("valor", ["Torre B", "torre b", "  TORRE   b ", "B"])
+def test_torre_quita_el_prefijo_torre(valor):
+    assert UnidadCrear(torre=valor, piso="1", numero="1").torre == "B"
+    assert UnidadActualizar(torre=valor).torre == "B"
+
 def test_torre_vacia_cae_a_unica():
     dto = UnidadCrear(torre="   ", piso="1", numero="1")
     assert dto.torre == "UNICA"
