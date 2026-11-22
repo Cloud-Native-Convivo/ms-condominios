@@ -73,6 +73,7 @@ async def test_lifespan_con_eureka(eureka_falla):
         patch.object(main.settings, "eureka_url", "http://eureka"),
         patch.object(main, "eureka_client", eureka),
         patch.object(main, "relay_outbox", _tarea_inmediata),
+        patch.object(main, "consumidor_alertas", _tarea_inmediata),
     ):
         async with main.lifespan(main.app):
             pass
@@ -87,6 +88,7 @@ async def test_lifespan_sin_eureka():
         patch.object(main.settings, "eureka_url", ""),
         patch.object(main, "eureka_client", eureka),
         patch.object(main, "relay_outbox", _tarea_inmediata),
+        patch.object(main, "consumidor_alertas", _tarea_inmediata),
     ):
         async with main.lifespan(main.app):
             pass

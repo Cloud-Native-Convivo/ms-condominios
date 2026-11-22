@@ -21,6 +21,7 @@ if config.config_file_name is not None:
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
 
+import app.model.alerta_espacio
 import app.model.condominio
 import app.model.outbox
 import app.model.solicitud_asignacion  # noqa: F401

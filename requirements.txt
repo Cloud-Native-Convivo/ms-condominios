@@ -8,4 +8,5 @@ python-dotenv
 alembic
 py-eureka-client
 aio-pika
+aiokafka
 tenacity

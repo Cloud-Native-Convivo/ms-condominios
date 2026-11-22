@@ -72,6 +72,10 @@ class Settings(BaseSettings):
     rabbitmq_usuario: str = "guest"
     rabbitmq_contrasena: str  # sin default: si falta la env var, el arranque falla
 
+    # --- Kafka (cluster de ms-espacios-comunes) ---
+    kafka_bootstrap_servers: str = "localhost:9092,localhost:9093,localhost:9094"
+    kafka_client_id: str = "ms-condominios"
+
     # --- Eureka ---
     eureka_url: str = ""
     eureka_ip: str = "localhost"
