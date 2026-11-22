@@ -6,10 +6,12 @@ from contextlib import asynccontextmanager
 import py_eureka_client.eureka_client as eureka_client
 from fastapi import FastAPI
 
+from app.api.alerta_router import router as alerta_router
 from app.api.condominio_router import router as condominio_router
 from app.api.solicitud_router import router as solicitud_router
 from app.api.unidad_router import router as unidad_router
 from app.config.settings import settings
+from app.events.kafka_alertas import consumidor_alertas
 from app.events.outbox_event import relay_outbox
 from app.exception.condominio_exception import (
     CondominioConUnidadesException,
@@ -54,13 +56,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     tarea_outbox = asyncio.create_task(relay_outbox())
     logger.info("Tarea outbox iniciada")
+    # Kafka caído no bloquea el arranque: el consumidor reintenta cada 10 s.
+    tarea_alertas = asyncio.create_task(consumidor_alertas())
+    logger.info("Consumidor de alertas Kafka iniciado")
 
     try:
         yield
     finally:
         logger.info("Deteniendo tareas...")
         tarea_outbox.cancel()
-        await asyncio.gather(tarea_outbox, return_exceptions=True)
+        tarea_alertas.cancel()
+        await asyncio.gather(tarea_outbox, tarea_alertas, return_exceptions=True)
         if settings.eureka_url:
             try:
                 await eureka_client.stop_async()
@@ -81,3 +87,4 @@ app.add_exception_handler(UnidadInexistenteException, unidad_invalida_handler)
 app.include_router(solicitud_router)
 app.include_router(condominio_router)
 app.include_router(unidad_router)
+app.include_router(alerta_router)
